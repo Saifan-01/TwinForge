@@ -1,0 +1,5 @@
+Regenerate this file on your machine after seeding the database:
+
+    pytest -v > docs/test_results.txt
+
+(The suite now includes tests/test_auth.py, so the previous 13-test output is out of date.)

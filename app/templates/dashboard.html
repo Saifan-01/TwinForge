@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plant Alpha | Digital Twin Console</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+</head>
+<body data-role="{{ role }}">
+<div class="shell">
+
+    <aside class="rail">
+        <div class="brand">
+            <div class="brand-title">Plant Alpha</div>
+            <div class="brand-sub">Digital twin console</div>
+        </div>
+        <nav class="tab-nav" aria-label="Sections">
+            <button class="tab-btn active" onclick="switchTab('tab-twin-map')">Plant floor<span class="tab-count" id="navAlertCount"></span></button>
+            <button class="tab-btn" onclick="switchTab('tab-devices')">Devices</button>
+            <button class="tab-btn" onclick="switchTab('tab-query-unusual')">Unusual today</button>
+            <button class="tab-btn" onclick="switchTab('tab-query-failure')">Failure risk</button>
+            <button class="tab-btn" onclick="switchTab('tab-telemetry')">Live readings</button>
+            <button class="tab-btn" onclick="switchTab('tab-benchmark')">Index performance</button>
+            <button class="tab-btn" onclick="switchTab('tab-fault-lab')">Fault lab</button>
+        </nav>
+        <div class="rail-foot">
+            <div class="who">{{ username }}</div>
+            <div class="role">{{ 'Administrator' if role == 'admin' else 'Read-only viewer' }}</div>
+            <p style="margin-top:6px"><a href="/logout">Log out</a></p>
+        </div>
+    </aside>
+
+    <div class="workspace">
+        <header class="topbar">
+            <h1 id="pageTitle">Plant floor</h1>
+            <div class="topbar-actions">
+                <div class="sim-pill" id="simStatusPill">
+                    <span class="indicator" id="simIndicator"></span>
+                    <span id="simStatusText">Simulator stopped</span>
+                </div>
+                <button class="btn btn-outline admin-only" id="btnToggleSim" onclick="toggleSimulator()">
+                    <span id="btnSimText">Start live readings</span>
+                </button>
+            </div>
+        </header>
+
+        <section class="status-strip" aria-label="Plant status">
+            <div class="metric-card">
+                <div class="metric-label">Devices</div>
+                <div class="metric-value" id="valTotalDevices">--</div>
+                <div class="metric-sub" id="subDeviceStatus">&nbsp;</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Readings stored</div>
+                <div class="metric-value" id="valTotalEvents">--</div>
+                <div class="metric-sub">Kept for 7 days</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Unusual events today</div>
+                <div class="metric-value" id="valUnusualCount">--</div>
+                <div class="metric-sub">Statistical outliers and fault codes</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Machines at high risk</div>
+                <div class="metric-value" id="valHighRiskCount">--</div>
+                <div class="metric-sub">Risk score 50 or higher</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Open alerts</div>
+                <div class="metric-value" id="valActiveAlerts">--</div>
+                <div class="metric-sub">Not yet acknowledged</div>
+            </div>
+        </section>
+
+        <main class="main-container">
+
+            <!-- Plant floor -->
+            <div id="tab-twin-map" class="tab-pane active">
+                <div class="grid-2col">
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h2>Factory floor</h2>
+                                <p class="section-desc">Each device sits at its stored GeoJSON position. Select a device to see its record.</p>
+                            </div>
+                        </div>
+                        <div class="plant-map-container" id="plantMapContainer">
+                            <div class="zone-box zone-machining"><span class="zone-tag">Machining bay B</span><span class="zone-inner-label">CNC milling</span></div>
+                            <div class="zone-box zone-assembly"><span class="zone-tag">Assembly line A</span><span class="zone-inner-label">Robotic welding</span></div>
+                            <div class="zone-box zone-logistics"><span class="zone-tag">Logistics C</span><span class="zone-inner-label">AGV depot</span></div>
+                            <div class="zone-box zone-energy"><span class="zone-tag">Power D</span><span class="zone-inner-label">Substation</span></div>
+                            <div class="zone-box zone-cleanroom"><span class="zone-tag">Cleanroom E</span><span class="zone-inner-label">Class 10k</span></div>
+                            <div id="mapDeviceLayer"></div>
+                        </div>
+                        <div class="map-legend">
+                            <span><span class="dot"></span>Normal</span>
+                            <span><span class="dot dot-warning"></span>Warning</span>
+                            <span><span class="dot dot-critical"></span>Critical</span>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>Alerts</h2>
+                            <span class="badge badge-danger" id="badgeAlertsCount">0 open</span>
+                        </div>
+                        <div class="alerts-list" id="alertsListContainer">
+                            <div class="loading-state">Loading alerts...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Devices (CRUD) -->
+            <div id="tab-devices" class="tab-pane">
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2>Devices</h2>
+                            <p class="section-desc">Every device is one MongoDB document. Sensors and hardware specs differ per device, with no shared schema.</p>
+                        </div>
+                        <button class="btn admin-only" onclick="openDeviceForm()">Add device</button>
+                    </div>
+                    <div class="toolbar">
+                        <input class="text-input grow" id="deviceSearch" type="search" placeholder="Search by ID or name" oninput="renderDevicesTable()" aria-label="Search devices">
+                        <select class="select-input" id="deviceTypeFilter" onchange="renderDevicesTable()" aria-label="Filter by type">
+                            <option value="">All types</option>
+                            <option value="CNC_MILL">CNC mill</option>
+                            <option value="AGV_FORKLIFT">AGV forklift</option>
+                            <option value="POWER_TRANSFORMER">Power transformer</option>
+                            <option value="HVAC_CHILLER">HVAC chiller</option>
+                            <option value="CLEANROOM_MONITOR">Cleanroom monitor</option>
+                            <option value="VIBRATION_SENSOR">Vibration sensor</option>
+                        </select>
+                        <select class="select-input" id="deviceStatusFilter" onchange="renderDevicesTable()" aria-label="Filter by status">
+                            <option value="">All statuses</option>
+                            <option value="ONLINE">Online</option>
+                            <option value="WARNING">Warning</option>
+                            <option value="CRITICAL">Critical</option>
+                            <option value="MAINTENANCE">Maintenance</option>
+                            <option value="DECOMMISSIONED">Decommissioned</option>
+                        </select>
+                        <span class="text-muted" id="deviceCount"></span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Device</th><th>Type</th><th>Zone</th><th>Status</th><th>Sensors</th><th></th></tr>
+                            </thead>
+                            <tbody id="tbodyDevices"><tr><td colspan="6" class="text-center text-muted">Loading devices...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Unusual today -->
+            <div id="tab-query-unusual" class="tab-pane">
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2>Everything unusual that happened today</h2>
+                            <p class="section-desc">
+                                A <code>$setWindowFields</code> pipeline computes a rolling mean and standard deviation per device,
+                                then flags readings more than 2.5 standard deviations from normal, plus any event carrying an error code.
+                            </p>
+                        </div>
+                        <div class="query-actions">
+                            <label>Window
+                                <select id="unusualTimeWindow" onchange="fetchUnusualEvents()" class="select-input">
+                                    <option value="24" selected>Last 24 hours</option>
+                                    <option value="12">Last 12 hours</option>
+                                    <option value="6">Last 6 hours</option>
+                                </select>
+                            </label>
+                            <button class="btn btn-outline" onclick="fetchUnusualEvents()">Run again</button>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table" id="tableUnusual">
+                            <thead>
+                                <tr><th>Time</th><th>Device</th><th>Zone</th><th>Why it was flagged</th><th>Readings</th><th>Errors</th></tr>
+                            </thead>
+                            <tbody id="tbodyUnusual"><tr><td colspan="6" class="text-center text-muted">Running query...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Failure risk -->
+            <div id="tab-query-failure" class="tab-pane">
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2>Which machines show signs of failure?</h2>
+                            <p class="section-desc">
+                                Compares how fast vibration and temperature are climbing over the last 12 hours, adds battery wear and
+                                error counts, and ranks machines on a 0 to 100 risk score.
+                            </p>
+                        </div>
+                        <button class="btn btn-outline" onclick="fetchFailurePrediction()">Recalculate</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table" id="tableFailure">
+                            <thead>
+                                <tr><th>Rank</th><th>Machine</th><th>Zone and type</th><th>Risk score</th><th>Vibration (mm/s)</th><th>Temperature (&deg;C)</th><th>Errors</th></tr>
+                            </thead>
+                            <tbody id="tbodyFailure"><tr><td colspan="7" class="text-center text-muted">Calculating...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Live readings -->
+            <div id="tab-telemetry" class="tab-pane">
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2>Latest reading per device</h2>
+                            <p class="section-desc">Each device type reports different sensors. MongoDB stores each reading exactly as sent, with no empty columns.</p>
+                        </div>
+                        <div class="filter-group">
+                            <select id="telemetryTypeFilter" onchange="filterTelemetryCards()" class="select-input" aria-label="Filter by device type">
+                                <option value="ALL">All device types</option>
+                                <option value="CNC_MILL">CNC mills</option>
+                                <option value="AGV_FORKLIFT">AGV forklifts</option>
+                                <option value="POWER_TRANSFORMER">Power transformers</option>
+                                <option value="HVAC_CHILLER">HVAC chillers</option>
+                                <option value="CLEANROOM_MONITOR">Cleanroom monitors</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="cards-grid" id="telemetryCardsGrid"><div class="loading-state">Loading readings...</div></div>
+                </div>
+            </div>
+
+            <!-- Index performance -->
+            <div id="tab-benchmark" class="tab-pane">
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2>Index performance</h2>
+                            <p class="section-desc">Query timings with and without indexes, measured by <code>scripts/benchmark_indexes.py</code> using <code>explain("executionStats")</code>.</p>
+                        </div>
+                        <button class="btn btn-outline" onclick="fetchBenchmarkReport()">Reload</button>
+                    </div>
+                    <div class="report" id="benchmarkReportContainer"><div class="loading-state">Loading results...</div></div>
+                </div>
+            </div>
+
+            <!-- Fault lab -->
+            <div id="tab-fault-lab" class="tab-pane">
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <h2>Fault lab</h2>
+                            <p class="section-desc">Inject a fault into a simulated machine, then watch the unusual-events and failure-risk queries react. Start the simulator first so new readings are generated.</p>
+                        </div>
+                        <button class="btn btn-danger admin-only" onclick="clearAllFaults()">Clear all faults</button>
+                    </div>
+                    <div class="fault-lab-grid">
+                        <div class="fault-box">
+                            <h3>Bearing vibration ramp</h3>
+                            <p>Vibration climbs steadily on a CNC mill, like a failing bearing. Raises its failure risk score.</p>
+                            <div class="fault-control-row">
+                                <select id="faultDevCnc" class="select-input" aria-label="CNC mill">
+                                    <option value="DEV-CNC-001">DEV-CNC-001</option>
+                                    <option value="DEV-CNC-004" selected>DEV-CNC-004</option>
+                                    <option value="DEV-CNC-007">DEV-CNC-007</option>
+                                </select>
+                                <button class="btn btn-warning admin-only" onclick="injectSpecificFault('faultDevCnc', 'vibration_ramp')">Start ramp</button>
+                            </div>
+                        </div>
+                        <div class="fault-box">
+                            <h3>Thermal runaway</h3>
+                            <p>Temperature jumps about 45&deg;C, as with a coolant failure. Appears as an outlier in the unusual-events query.</p>
+                            <div class="fault-control-row">
+                                <select id="faultDevTemp" class="select-input" aria-label="Device for temperature spike">
+                                    <option value="DEV-CNC-002">DEV-CNC-002</option>
+                                    <option value="DEV-HVAC-001">DEV-HVAC-001</option>
+                                    <option value="DEV-PUMP-003">DEV-PUMP-003</option>
+                                </select>
+                                <button class="btn btn-danger admin-only" onclick="injectSpecificFault('faultDevTemp', 'temperature_spike')">Spike temperature</button>
+                            </div>
+                        </div>
+                        <div class="fault-box">
+                            <h3>AGV battery drain</h3>
+                            <p>Charge falls below 10% on an autonomous forklift.</p>
+                            <div class="fault-control-row">
+                                <select id="faultDevAgv" class="select-input" aria-label="AGV">
+                                    <option value="DEV-AGV-001">DEV-AGV-001</option>
+                                    <option value="DEV-AGV-007" selected>DEV-AGV-007</option>
+                                    <option value="DEV-AGV-010">DEV-AGV-010</option>
+                                </select>
+                                <button class="btn btn-warning admin-only" onclick="injectSpecificFault('faultDevAgv', 'battery_drain')">Drain battery</button>
+                            </div>
+                        </div>
+                        <div class="fault-box">
+                            <h3>Voltage surge</h3>
+                            <p>An 80 V transient with a trip code on a power transformer. Flagged by the error-code rule.</p>
+                            <div class="fault-control-row">
+                                <select id="faultDevPdu" class="select-input" aria-label="Power transformer">
+                                    <option value="DEV-PDU-001">DEV-PDU-001</option>
+                                    <option value="DEV-PDU-002" selected>DEV-PDU-002</option>
+                                </select>
+                                <button class="btn btn-danger admin-only" onclick="injectSpecificFault('faultDevPdu', 'voltage_surge')">Trigger surge</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="active-faults">
+                        <h3>Active faults</h3>
+                        <div id="activeFaultsContainer">No faults active.</div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+</div>
+
+<!-- Device details modal -->
+<div id="deviceModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalDeviceTitle">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="modalDeviceTitle">Device</h3>
+            <button class="modal-close" onclick="closeModal('deviceModal')" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body" id="modalDeviceBody"></div>
+    </div>
+</div>
+
+<!-- Add / edit device modal -->
+<div id="deviceFormModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="deviceFormTitle">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="deviceFormTitle">Add device</h3>
+            <button class="modal-close" onclick="closeModal('deviceFormModal')" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-error hidden" id="deviceFormError" role="alert"></div>
+            <div class="form-grid">
+                <div class="field"><label for="fDeviceId">Device ID</label>
+                    <input class="text-input" id="fDeviceId" placeholder="DEV-CNC-010">
+                    <span class="hint">Capital letters, digits and dashes, starting with DEV-</span></div>
+                <div class="field"><label for="fName">Name</label>
+                    <input class="text-input" id="fName" placeholder="CNC Mill #10"></div>
+                <div class="field"><label for="fType">Type</label>
+                    <select class="select-input" id="fType">
+                        <option value="CNC_MILL">CNC mill</option>
+                        <option value="AGV_FORKLIFT">AGV forklift</option>
+                        <option value="POWER_TRANSFORMER">Power transformer</option>
+                        <option value="HVAC_CHILLER">HVAC chiller</option>
+                        <option value="CLEANROOM_MONITOR">Cleanroom monitor</option>
+                        <option value="VIBRATION_SENSOR">Vibration sensor</option>
+                    </select></div>
+                <div class="field"><label for="fZone">Zone</label>
+                    <select class="select-input" id="fZone">
+                        {% for z in zones %}<option value="{{ z.zoneId }}">{{ z.name }}</option>{% endfor %}
+                    </select></div>
+                <div class="field"><label for="fStatus">Status</label>
+                    <select class="select-input" id="fStatus">
+                        <option value="ONLINE">Online</option>
+                        <option value="WARNING">Warning</option>
+                        <option value="CRITICAL">Critical</option>
+                        <option value="MAINTENANCE">Maintenance</option>
+                        <option value="DECOMMISSIONED">Decommissioned</option>
+                    </select></div>
+                <div class="field"><label for="fFirmware">Firmware version</label>
+                    <input class="text-input" id="fFirmware" placeholder="v1.0.0"></div>
+                <div class="field full"><label for="fCaps">Sensors</label>
+                    <input class="text-input" id="fCaps" placeholder="vibration_mms, temperature_c, pressure_bar">
+                    <span class="hint">Comma-separated. Each device can report a different set.</span></div>
+                <div class="field"><label for="fLng">Longitude</label>
+                    <input class="text-input" id="fLng" type="number" step="any" value="-84.388"></div>
+                <div class="field"><label for="fLat">Latitude</label>
+                    <input class="text-input" id="fLat" type="number" step="any" value="33.749"></div>
+                <div class="field full"><label for="fSpecs">Hardware specs (JSON)</label>
+                    <textarea class="text-input" id="fSpecs" rows="4" placeholder='{"spindleMaxRpm": 12000}'></textarea></div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-outline" onclick="closeModal('deviceFormModal')">Cancel</button>
+            <button class="btn" id="btnSaveDevice" onclick="saveDevice()">Save device</button>
+        </div>
+    </div>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<script src="/static/js/dashboard.js"></script>
+</body>
+</html>

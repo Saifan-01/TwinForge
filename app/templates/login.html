@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log in | Plant Alpha Digital Twin</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="login-wrap">
+        <section class="login-side">
+            <h1>Know which machine fails next.</h1>
+            <p>A digital twin of Plant Alpha: every sensor reading, anomaly and risk score in one place, stored in MongoDB.</p>
+        </section>
+        <section class="login-form-wrap">
+            <form class="login-form" method="post" autocomplete="on">
+                <h2>Log in</h2>
+                {% if error %}<div class="form-error" role="alert">{{ error }}</div>{% endif %}
+                <div class="field">
+                    <label for="username">Username</label>
+                    <input class="text-input" id="username" name="username" required autofocus autocomplete="username">
+                </div>
+                <div class="field">
+                    <label for="password">Password</label>
+                    <input class="text-input" id="password" name="password" type="password" required autocomplete="current-password">
+                </div>
+                <button class="btn" type="submit">Log in</button>
+            </form>
+        </section>
+    </div>
+</body>
+</html>
